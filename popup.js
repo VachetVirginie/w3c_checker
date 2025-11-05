@@ -1,37 +1,20 @@
-// Système de debug
-const debugContent = document.getElementById('debugContent');
-const debugDiv = document.getElementById('debug');
-
-function addDebug(msg) {
-  console.log(msg);
-  const line = document.createElement('div');
-  line.className = 'debug-line';
-  line.textContent = msg;
-  debugContent.appendChild(line);
-  debugDiv.style.display = 'block';
-}
-
-addDebug('popup.js chargé');
-
 const checkPageButton = document.getElementById('checkPage');
 const resultDiv = document.getElementById('result');
 const loadingDiv = document.getElementById('loading');
-
-addDebug('Éléments trouvés: button=' + !!checkPageButton + ', result=' + !!resultDiv + ', loading=' + !!loadingDiv);
+const buttonText = document.getElementById('buttonText');
 
 if (checkPageButton) {
   checkPageButton.addEventListener('click', async function() {
-    addDebug('--- Bouton cliqué ---');
+    // Désactiver le bouton pendant la vérification
+    checkPageButton.disabled = true;
+    buttonText.textContent = 'Analyse en cours...';
     
     loadingDiv.style.display = 'block';
     resultDiv.style.display = 'none';
     resultDiv.innerHTML = '';
-    debugContent.innerHTML = '';
     
     try {
-      addDebug('Étape 1: Récupération des tabs');
       const tabs = await browser.tabs.query({active: true, currentWindow: true});
-      addDebug('Tabs trouvés: ' + tabs.length);
       
       if (!tabs || tabs.length === 0) {
         throw new Error('Aucun onglet trouvé');
@@ -40,27 +23,17 @@ if (checkPageButton) {
       const currentUrl = tabs[0].url;
       const tabId = tabs[0].id;
       
-      addDebug('URL: ' + currentUrl);
-      addDebug('TabID: ' + tabId);
-      
       if (!currentUrl.startsWith('http://') && !currentUrl.startsWith('https://')) {
-        throw new Error('URL non valide: ' + currentUrl);
+        throw new Error('Cette extension ne fonctionne que sur les pages HTTP/HTTPS');
       }
       
-      addDebug('Étape 2: Récupération du HTML depuis la console');
       const response_html = await browser.tabs.sendMessage(tabId, {action: 'getHTML'});
-      addDebug('Réponse reçue: ' + (response_html ? 'oui' : 'non'));
       
       if (!response_html || !response_html.html) {
-        throw new Error('HTML non reçu');
+        throw new Error('Impossible de récupérer le contenu HTML de la page');
       }
       
       const htmlContent = response_html.html;
-      addDebug('Taille HTML: ' + htmlContent.length + ' caractères');
-      
-      addDebug('Étape 3: Envoi au validateur W3C');
-      addDebug('HTML commence par: ' + htmlContent.substring(0, 50));
-      addDebug('HTML contient DOCTYPE: ' + (htmlContent.includes('DOCTYPE') ? 'OUI' : 'NON'));
       
       const response = await fetch('https://html5.validator.nu/?out=json', {
         method: 'POST',
@@ -72,32 +45,20 @@ if (checkPageButton) {
         body: htmlContent
       });
       
-      addDebug('Status: ' + response.status + ' ' + response.statusText);
-      
       if (!response.ok) {
         if (response.status === 429) {
-          throw new Error('Trop de requêtes - Attendez quelques minutes avant de retester');
+          throw new Error('Trop de requêtes. Veuillez attendre quelques minutes avant de retenter.');
         }
-        throw new Error('HTTP ' + response.status);
+        throw new Error(`Erreur du validateur (${response.status})`);
       }
       
       const responseText = await response.text();
-      addDebug('Réponse brute (100 chars): ' + responseText.substring(0, 100));
       
       let data;
       try {
         data = JSON.parse(responseText);
       } catch (e) {
-        addDebug('Erreur JSON: ' + e.message);
-        throw new Error('Le validateur a renvoyé du HTML au lieu de JSON');
-      }
-      addDebug('Données reçues: ' + (data.messages ? data.messages.length + ' messages' : 'aucun message'));
-      
-      // Debug: afficher les 3 premiers messages
-      if (data.messages && data.messages.length > 0) {
-        for (let i = 0; i < Math.min(3, data.messages.length); i++) {
-          addDebug('Message ' + (i+1) + ': ' + data.messages[i].message);
-        }
+        throw new Error('Réponse invalide du validateur W3C');
       }
       
       loadingDiv.style.display = 'none';
@@ -113,12 +74,6 @@ if (checkPageButton) {
         ];
         
         const allErrors = data.messages.filter(msg => msg.type === 'error');
-        
-        // Debug: afficher les premiers messages d'erreur pour voir le format exact
-        if (allErrors.length > 0) {
-          addDebug('Premier message erreur: "' + allErrors[0].message + '"');
-        }
-        
         const errors = allErrors.filter(error => 
           !ignoredErrors.some(ignored => error.message.includes(ignored))
         );
@@ -126,76 +81,103 @@ if (checkPageButton) {
         
         resultDiv.innerHTML = '';
         
-        // Résumé
+        // Résumé avec le nouveau style
         const summary = document.createElement('div');
-        summary.style.marginBottom = '15px';
-        summary.style.padding = '10px';
-        summary.style.backgroundColor = '#f8f9fa';
-        summary.style.borderRadius = '4px';
+        summary.className = 'result-summary';
         
-        const errorText = document.createElement('p');
         const filteredCount = allErrors.length - errors.length;
-        let summaryText = `⚠️ <strong>${errors.length} erreur(s)</strong> • ℹ️ ${warnings.length} avertissement(s)`;
+        const stats = document.createElement('div');
+        stats.className = 'stats';
+        
+        const errorStat = document.createElement('div');
+        errorStat.className = `stat-item${errors.length > 0 ? ' has-errors' : ''}`;
+        errorStat.innerHTML = `Erreurs: ${errors.length}`;
+        errorStat.setAttribute('role', 'status');
+        errorStat.setAttribute('aria-label', `${errors.length} erreur${errors.length > 1 ? 's' : ''} trouvée${errors.length > 1 ? 's' : ''}`);
+        
+        const warningStat = document.createElement('div');
+        warningStat.className = `stat-item${warnings.length > 0 ? ' has-warnings' : ''}`;
+        warningStat.innerHTML = `Warnings: ${warnings.length}`;
+        warningStat.setAttribute('role', 'status');
+        warningStat.setAttribute('aria-label', `${warnings.length} avertissement${warnings.length > 1 ? 's' : ''} trouvé${warnings.length > 1 ? 's' : ''}`);
+        
+        stats.appendChild(errorStat);
+        stats.appendChild(warningStat);
+        
         if (filteredCount > 0) {
-          summaryText += ` <span style="color: #666; font-size: 11px;">(${filteredCount} erreurs CSS modernes ignorées)</span>`;
+          const filteredNote = document.createElement('div');
+          filteredNote.style.fontSize = '12px';
+          filteredNote.style.color = '#718096';
+          filteredNote.style.marginTop = '8px';
+          filteredNote.textContent = `${filteredCount} erreurs CSS modernes ignorées`;
+          summary.appendChild(stats);
+          summary.appendChild(filteredNote);
+        } else {
+          summary.appendChild(stats);
         }
-        errorText.innerHTML = summaryText;
-        errorText.style.margin = '0';
-        summary.appendChild(errorText);
+        
         resultDiv.appendChild(summary);
         
-        // Afficher les erreurs
+        // Afficher les erreurs avec le nouveau style
         if (errors.length > 0) {
-          const errorSection = document.createElement('div');
-          errorSection.style.marginBottom = '10px';
+          const errorSection = document.createElement('section');
+          errorSection.className = 'section';
+          errorSection.setAttribute('aria-labelledby', 'errors-heading');
           
-          const errorTitle = document.createElement('h4');
-          errorTitle.textContent = 'Erreurs:';
-          errorTitle.style.color = '#dc3545';
-          errorTitle.style.margin = '0 0 8px 0';
-          errorTitle.style.fontSize = '14px';
+          const errorTitle = document.createElement('h3');
+          errorTitle.id = 'errors-heading';
+          errorTitle.className = 'section-title errors';
+          errorTitle.textContent = 'Erreurs';
           errorSection.appendChild(errorTitle);
           
-          errors.forEach((error, index) => {
+          errors.forEach((error) => {
             const errorDiv = document.createElement('div');
-            errorDiv.style.padding = '8px';
-            errorDiv.style.marginBottom = '5px';
-            errorDiv.style.backgroundColor = '#f8d7da';
-            errorDiv.style.border = '1px solid #f5c6cb';
-            errorDiv.style.borderRadius = '3px';
-            errorDiv.style.fontSize = '12px';
+            errorDiv.className = 'message-item error-item';
             
-            const location = error.lastLine ? `Ligne ${error.lastLine}` : '';
-            errorDiv.innerHTML = `<strong>${location}</strong><br>${error.message}`;
+            if (error.lastLine) {
+              const location = document.createElement('div');
+              location.className = 'message-location';
+              location.textContent = `Ligne ${error.lastLine}`;
+              errorDiv.appendChild(location);
+            }
+            
+            const message = document.createElement('div');
+            message.textContent = error.message;
+            errorDiv.appendChild(message);
+            
             errorSection.appendChild(errorDiv);
           });
           
           resultDiv.appendChild(errorSection);
         }
         
-        // Afficher les avertissements
+        // Afficher les avertissements avec le nouveau style
         if (warnings.length > 0) {
-          const warningSection = document.createElement('div');
-          warningSection.style.marginBottom = '10px';
+          const warningSection = document.createElement('section');
+          warningSection.className = 'section';
+          warningSection.setAttribute('aria-labelledby', 'warnings-heading');
           
-          const warningTitle = document.createElement('h4');
-          warningTitle.textContent = 'Avertissements:';
-          warningTitle.style.color = '#856404';
-          warningTitle.style.margin = '0 0 8px 0';
-          warningTitle.style.fontSize = '14px';
+          const warningTitle = document.createElement('h3');
+          warningTitle.id = 'warnings-heading';
+          warningTitle.className = 'section-title warnings';
+          warningTitle.textContent = 'Avertissements';
           warningSection.appendChild(warningTitle);
           
-          warnings.forEach((warning, index) => {
+          warnings.forEach((warning) => {
             const warningDiv = document.createElement('div');
-            warningDiv.style.padding = '8px';
-            warningDiv.style.marginBottom = '5px';
-            warningDiv.style.backgroundColor = '#fff3cd';
-            warningDiv.style.border = '1px solid #ffeaa7';
-            warningDiv.style.borderRadius = '3px';
-            warningDiv.style.fontSize = '12px';
+            warningDiv.className = 'message-item warning-item';
             
-            const location = warning.lastLine ? `Ligne ${warning.lastLine}` : '';
-            warningDiv.innerHTML = `<strong>${location}</strong><br>${warning.message}`;
+            if (warning.lastLine) {
+              const location = document.createElement('div');
+              location.className = 'message-location';
+              location.textContent = `Ligne ${warning.lastLine}`;
+              warningDiv.appendChild(location);
+            }
+            
+            const message = document.createElement('div');
+            message.textContent = warning.message;
+            warningDiv.appendChild(message);
+            
             warningSection.appendChild(warningDiv);
           });
           
@@ -204,38 +186,41 @@ if (checkPageButton) {
         
         // Lien vers rapport complet (seulement pour sites publics)
         if (!currentUrl.includes('localhost') && !currentUrl.includes('127.0.0.1')) {
-          const linkP = document.createElement('p');
-          linkP.style.marginTop = '15px';
+          const linkDiv = document.createElement('div');
+          linkDiv.className = 'external-link';
           const link = document.createElement('a');
           link.href = 'https://validator.w3.org/nu/?doc=' + encodeURIComponent(currentUrl);
           link.target = '_blank';
           link.textContent = 'Voir le rapport complet sur W3C';
-          link.style.fontSize = '12px';
-          linkP.appendChild(link);
-          resultDiv.appendChild(linkP);
+          linkDiv.appendChild(link);
+          resultDiv.appendChild(linkDiv);
         }
         
         resultDiv.className = 'invalid';
       } else {
-        resultDiv.innerHTML = '✅ La page est valide selon les normes W3C !';
+        resultDiv.innerHTML = '<div class="result-summary">La page est valide selon les normes W3C</div>';
         resultDiv.className = 'valid';
       }
       
       resultDiv.style.display = 'block';
-      addDebug('✅ Succès!');
     } catch (error) {
-      addDebug('❌ ERREUR: ' + error.message);
-      
       loadingDiv.style.display = 'none';
-      resultDiv.textContent = '';
-      const p = document.createElement('p');
-      p.style.color = 'red';
-      p.textContent = '❌ ' + error.message;
-      resultDiv.appendChild(p);
+      
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'result-summary';
+      errorDiv.style.background = '#fed7d7';
+      errorDiv.style.color = '#c53030';
+      errorDiv.style.border = '1px solid #feb2b2';
+      errorDiv.textContent = error.message;
+      
+      resultDiv.innerHTML = '';
+      resultDiv.appendChild(errorDiv);
       resultDiv.className = 'invalid';
       resultDiv.style.display = 'block';
+    } finally {
+      // Réactiver le bouton
+      checkPageButton.disabled = false;
+      buttonText.textContent = 'Lancer l\'audit W3C';
     }
   });
-} else {
-  addDebug('❌ Bouton non trouvé!');
 }
