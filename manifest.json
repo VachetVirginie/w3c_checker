@@ -15,7 +15,7 @@
     "tabs"
   ],
   "host_permissions": [
-    "https://validator.w3.org/*",
+    "https://html5.validator.nu/*",
     "<all_urls>"
   ],
   "content_scripts": [
