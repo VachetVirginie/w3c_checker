@@ -12,7 +12,8 @@
     }
   },
   "permissions": [
-    "tabs"
+    "tabs",
+    "storage"
   ],
   "host_permissions": [
     "https://html5.validator.nu/*",
