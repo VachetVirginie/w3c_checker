@@ -3,6 +3,12 @@ const resultDiv = document.getElementById('result');
 const loadingDiv = document.getElementById('loading');
 const buttonText = document.getElementById('buttonText');
 
+const ICONS = {
+  copy: `<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>`,
+  check: `<polyline points="20 6 9 17 4 12"></polyline>`,
+  error: `<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>`
+};
+
 if (checkPageButton) {
   checkPageButton.addEventListener('click', async function() {
     // Désactiver le bouton pendant la vérification
@@ -124,29 +130,57 @@ if (checkPageButton) {
           errorSection.className = 'section';
           errorSection.setAttribute('aria-labelledby', 'errors-heading');
           
+          const errorHeader = document.createElement('div');
+          errorHeader.className = 'section-header';
+          
           const errorTitle = document.createElement('h3');
           errorTitle.id = 'errors-heading';
           errorTitle.className = 'section-title errors';
           errorTitle.textContent = 'Erreurs';
-          errorSection.appendChild(errorTitle);
           
-          errors.forEach((error) => {
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'message-item error-item';
+          const uniqueErrors = getUniqueMessages(errors);
+          
+          // Variables pour le suivi de l'affichage
+          let currentDisplayedErrors = uniqueErrors;
+          let isErrorsFiltered = false;
+          
+          const errorCopyButton = createCopyButton(
+            () => copyMessagesToClipboard(currentDisplayedErrors, isErrorsFiltered),
+            'Copier les erreurs'
+          );
+          
+          errorHeader.appendChild(errorTitle);
+          errorHeader.appendChild(errorCopyButton);
+          errorSection.appendChild(errorHeader);
+
+          if (uniqueErrors.length < errors.length) {
+            const duplicateSection = await getErrorDuplicateToggle();
+            errorSection.appendChild(duplicateSection);
             
-            if (error.lastLine) {
-              const location = document.createElement('div');
-              location.className = 'message-location';
-              location.textContent = `Ligne ${error.lastLine}`;
-              errorDiv.appendChild(location);
-            }
+            const filterEnabled = await getPreference('filterErrorDuplicates', false);
+            currentDisplayedErrors = filterEnabled ? uniqueErrors : errors;
+            isErrorsFiltered = filterEnabled;
+
+            duplicateSection.querySelector('input').addEventListener('change', async e => {
+              await savePreference('filterErrorDuplicates', e.target.checked);
+              
+              currentDisplayedErrors = e.target.checked ? uniqueErrors : errors;
+              isErrorsFiltered = e.target.checked;
+              
+              const errorList = getErrorList(
+                e.target.checked ? uniqueErrors : errors,
+                !e.target.checked
+              );
+              
+              errorSection.replaceChild(errorList, errorSection.querySelector('#errors-list'));
+            });
             
-            const message = document.createElement('div');
-            message.textContent = error.message;
-            errorDiv.appendChild(message);
-            
-            errorSection.appendChild(errorDiv);
-          });
+            const errorsList = getErrorList(filterEnabled ? uniqueErrors : errors, !filterEnabled);
+            errorSection.appendChild(errorsList);
+          } else {
+            const errorsList = getErrorList(uniqueErrors);
+            errorSection.appendChild(errorsList);
+          }
           
           resultDiv.appendChild(errorSection);
         }
@@ -157,30 +191,58 @@ if (checkPageButton) {
           warningSection.className = 'section';
           warningSection.setAttribute('aria-labelledby', 'warnings-heading');
           
+          const warningHeader = document.createElement('div');
+          warningHeader.className = 'section-header';
+          
           const warningTitle = document.createElement('h3');
           warningTitle.id = 'warnings-heading';
           warningTitle.className = 'section-title warnings';
           warningTitle.textContent = 'Avertissements';
-          warningSection.appendChild(warningTitle);
           
-          warnings.forEach((warning) => {
-            const warningDiv = document.createElement('div');
-            warningDiv.className = 'message-item warning-item';
-            
-            if (warning.lastLine) {
-              const location = document.createElement('div');
-              location.className = 'message-location';
-              location.textContent = `Ligne ${warning.lastLine}`;
-              warningDiv.appendChild(location);
-            }
-            
-            const message = document.createElement('div');
-            message.textContent = warning.message;
-            warningDiv.appendChild(message);
-            
-            warningSection.appendChild(warningDiv);
-          });
+          const uniqueWarnings = getUniqueMessages(warnings);
           
+          // Variables pour le suivi de l'affichage
+          let currentDisplayedWarnings = uniqueWarnings;
+          let isWarningsFiltered = false;
+          
+          const warningCopyButton = createCopyButton(
+            () => copyMessagesToClipboard(currentDisplayedWarnings, isWarningsFiltered),
+            'Copier les avertissements'
+          );
+          
+          warningHeader.appendChild(warningTitle);
+          warningHeader.appendChild(warningCopyButton);
+          warningSection.appendChild(warningHeader);
+
+          if (uniqueWarnings.length < warnings.length) {
+            const duplicateSection = await getWarningDuplicateToggle();
+            warningSection.appendChild(duplicateSection);
+            
+            const filterEnabled = await getPreference('filterWarningDuplicates', false);
+            currentDisplayedWarnings = filterEnabled ? uniqueWarnings : warnings;
+            isWarningsFiltered = filterEnabled;
+
+            duplicateSection.querySelector('input').addEventListener('change', async e => {
+              await savePreference('filterWarningDuplicates', e.target.checked);
+              
+              currentDisplayedWarnings = e.target.checked ? uniqueWarnings : warnings;
+              isWarningsFiltered = e.target.checked;
+              
+              const warningList = getWarningList(
+                e.target.checked ? uniqueWarnings : warnings,
+                !e.target.checked
+              );
+
+              warningSection.replaceChild(warningList, warningSection.querySelector('#warnings-list'));
+            });
+            
+            const warningsList = getWarningList(filterEnabled ? uniqueWarnings : warnings, !filterEnabled);
+            warningSection.appendChild(warningsList);
+          } else {
+            const warningsList = getWarningList(uniqueWarnings);
+            warningSection.appendChild(warningsList);
+          }
+
           resultDiv.appendChild(warningSection);
         }
         
@@ -223,4 +285,172 @@ if (checkPageButton) {
       buttonText.textContent = 'Lancer l\'audit W3C';
     }
   });
+}
+
+// Copier une liste de messages dans le presse-papiers
+function copyMessagesToClipboard(messages, isFiltered = false) {
+  if (messages.length === 0) return navigator.clipboard.writeText('');
+  
+  const text = messages.map(msg => {
+    const line = isFiltered || !msg.lastLine ? '' : `[Ligne ${msg.lastLine}] `;
+    return `• ${line}${msg.message}`;
+  }).join('\n');
+  
+  return navigator.clipboard.writeText(text);
+}
+
+// Créer une icône SVG
+function createSvgIcon(iconPath) {
+  return `<svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${iconPath}</svg>`;
+}
+
+// Créer un bouton de copie avec feedback visuel
+function createCopyButton(copyFunction, label) {
+  const copyButton = document.createElement('button');
+  copyButton.className = 'copy-button';
+  copyButton.innerHTML = `${createSvgIcon(ICONS.copy)}<span>${label}</span>`;
+  copyButton.setAttribute('aria-label', label);
+  
+  const updateButton = (icon, text, className = '') => {
+    if (className) copyButton.classList.add(className);
+    else copyButton.classList.remove('copied');
+    copyButton.innerHTML = `${createSvgIcon(icon)}<span>${text}</span>`;
+  };
+  
+  copyButton.addEventListener('click', async () => {
+    try {
+      await copyFunction();
+      updateButton(ICONS.check, 'Copié !', 'copied');
+      setTimeout(() => updateButton(ICONS.copy, label), 3000);
+    } catch (error) {
+      console.error('Erreur lors de la copie:', error);
+      updateButton(ICONS.error, 'Erreur');
+      setTimeout(() => updateButton(ICONS.copy, label), 3000);
+    }
+  });
+  
+  return copyButton;
+}
+
+// Obtenir les messages uniques (filtrer les doublons)
+function getUniqueMessages(messages) {
+  const messageMap = new Map();
+  messages.forEach(msg => {
+    const cleanMsg = {
+      ...msg, 
+      message: msg.message.replace(' (Suppressing further warnings from this subtree.)', '').trim()
+    };
+    messageMap.set(cleanMsg.message, cleanMsg);
+  });
+  return Array.from(messageMap.values());
+}
+
+// Sauvegarder une préférence utilisateur
+async function savePreference(key, value) {
+  try {
+    await browser.storage.local.set({ [key]: value });
+  } catch (error) {
+    console.error('Erreur lors de la sauvegarde des préférences:', error);
+  }
+}
+
+// Récupérer une préférence utilisateur
+async function getPreference(key, defaultValue) {
+  try {
+    const result = await browser.storage.local.get(key);
+    return result[key] !== undefined ? result[key] : defaultValue;
+  } catch (error) {
+    console.error('Erreur lors de la récupération des préférences:', error);
+    return defaultValue;
+  }
+}
+
+// Créer la liste d'affichage des erreurs
+function getErrorList(errors, showlines = true) {
+  const errorsList = document.createElement('ul');
+  errorsList.id = 'errors-list';
+  errors.forEach((error) => {
+    const errorItem = document.createElement('li');
+    errorItem.className = 'message-item error-item';
+
+    if (error.lastLine && showlines) {
+      const location = document.createElement('div');
+      location.className = 'message-location';
+      location.textContent = `Ligne ${error.lastLine}`;
+      errorItem.appendChild(location);
+    }
+    
+    const message = document.createElement('div');
+    message.textContent = error.message;
+    errorItem.appendChild(message);
+    
+    errorsList.appendChild(errorItem);
+  });
+  return errorsList;
+}
+
+// Créer la liste d'affichage des avertissements
+function getWarningList(warnings, showlines = true) {
+  const warningsList = document.createElement('ul');
+  warningsList.id = 'warnings-list';
+  warnings.forEach((warning) => {
+    const warningItem = document.createElement('li');
+    warningItem.className = 'message-item warning-item';
+
+    if (warning.lastLine && showlines) {
+      const location = document.createElement('div');
+      location.className = 'message-location';
+      location.textContent = `Ligne ${warning.lastLine}`;
+      warningItem.appendChild(location);
+    }
+    
+    const message = document.createElement('div');
+    message.textContent = warning.message;
+    warningItem.appendChild(message);
+    
+    warningsList.appendChild(warningItem);
+  });
+  return warningsList;
+}
+
+// Créer le toggle de filtrage des erreurs en double
+async function getErrorDuplicateToggle() {
+  const duplicateSection = document.createElement('div');
+  duplicateSection.className = 'duplicate-section switch';
+  const errorDuplicateToggle = document.createElement('input');
+  errorDuplicateToggle.setAttribute('type', 'checkbox');
+  errorDuplicateToggle.checked = await getPreference('filterErrorDuplicates', false);
+  errorDuplicateToggle.id = 'error-duplicate-toggle';
+  duplicateSection.appendChild(errorDuplicateToggle);
+  const errorDuplicateLabel = document.createElement('label');
+  errorDuplicateLabel.htmlFor = 'error-duplicate-toggle';
+  const visibleToggle = document.createElement('div');
+  visibleToggle.className = 'visible-switch';
+  const labelContent = document.createElement('span');
+  labelContent.textContent = 'Filtrer les erreurs en double';
+  errorDuplicateLabel.appendChild(visibleToggle);
+  errorDuplicateLabel.appendChild(labelContent);
+  duplicateSection.appendChild(errorDuplicateLabel);
+  return duplicateSection;
+}
+
+// Créer le toggle de filtrage des avertissements en double
+async function getWarningDuplicateToggle() {
+  const duplicateSection = document.createElement('div');
+  duplicateSection.className = 'duplicate-section switch';
+  const warningDuplicateToggle = document.createElement('input');
+  warningDuplicateToggle.setAttribute('type', 'checkbox');
+  warningDuplicateToggle.checked = await getPreference('filterWarningDuplicates', false);
+  warningDuplicateToggle.id = 'warning-duplicate-toggle';
+  duplicateSection.appendChild(warningDuplicateToggle);
+  const warningDuplicateLabel = document.createElement('label');
+  warningDuplicateLabel.htmlFor = 'warning-duplicate-toggle';
+  const visibleToggle = document.createElement('div');
+  visibleToggle.className = 'visible-switch';
+  const labelContent = document.createElement('span');
+  labelContent.textContent = 'Filtrer les avertissements en double';
+  warningDuplicateLabel.appendChild(visibleToggle);
+  warningDuplicateLabel.appendChild(labelContent);
+  duplicateSection.appendChild(warningDuplicateLabel);
+  return duplicateSection;
 }
