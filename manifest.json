@@ -1,8 +1,11 @@
 {
   "manifest_version": 3,
   "name": "W3C Validator Checker",
-  "version": "1.1",
+  "version": "1.2",
   "description": "Vérifie la validité W3C de la page courante",
+  "icons": {
+    "128": "Odeline.png"
+  },
   "browser_specific_settings": {
     "gecko": {
       "id": "w3c-validator@example.com",
@@ -27,6 +30,7 @@
   ],
   "action": {
     "default_title": "Vérifier la validité W3C",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": "Odeline.png"
   }
 }
