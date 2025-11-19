@@ -3,10 +3,12 @@ const resultDiv = document.getElementById('result');
 const loadingDiv = document.getElementById('loading');
 const buttonText = document.getElementById('buttonText');
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
 const ICONS = {
-  copy: `<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>`,
-  check: `<polyline points="20 6 9 17 4 12"></polyline>`,
-  error: `<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>`
+  copy: 'copy',
+  check: 'check',
+  error: 'error'
 };
 
 if (checkPageButton) {
@@ -17,7 +19,7 @@ if (checkPageButton) {
     
     loadingDiv.style.display = 'block';
     resultDiv.style.display = 'none';
-    resultDiv.innerHTML = '';
+    clearElement(resultDiv);
     
     try {
       const tabs = await browser.tabs.query({active: true, currentWindow: true});
@@ -85,7 +87,7 @@ if (checkPageButton) {
         );
         const warnings = data.messages.filter(msg => msg.type === 'info' || msg.type === 'warning');
         
-        resultDiv.innerHTML = '';
+        clearElement(resultDiv);
         
         // Résumé avec le nouveau style
         const summary = document.createElement('div');
@@ -260,7 +262,11 @@ if (checkPageButton) {
         
         resultDiv.className = 'invalid';
       } else {
-        resultDiv.innerHTML = '<div class="result-summary">La page est valide selon les normes W3C</div>';
+        clearElement(resultDiv);
+        const successDiv = document.createElement('div');
+        successDiv.className = 'result-summary';
+        successDiv.textContent = 'La page est valide selon les normes W3C';
+        resultDiv.appendChild(successDiv);
         resultDiv.className = 'valid';
       }
       
@@ -275,7 +281,7 @@ if (checkPageButton) {
       errorDiv.style.border = '1px solid #feb2b2';
       errorDiv.textContent = error.message;
       
-      resultDiv.innerHTML = '';
+      clearElement(resultDiv);
       resultDiv.appendChild(errorDiv);
       resultDiv.className = 'invalid';
       resultDiv.style.display = 'block';
@@ -298,23 +304,100 @@ function copyMessagesToClipboard(messages, isFiltered = false) {
   
   return navigator.clipboard.writeText(text);
 }
+ 
+function clearElement(element) {
+  while (element.firstChild) {
+    element.removeChild(element.firstChild);
+  }
+}
 
 // Créer une icône SVG
-function createSvgIcon(iconPath) {
-  return `<svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${iconPath}</svg>`;
+function createSvgIcon(iconType) {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'copy-icon');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+
+  switch (iconType) {
+    case ICONS.copy: {
+      const rect = document.createElementNS(SVG_NS, 'rect');
+      rect.setAttribute('x', '9');
+      rect.setAttribute('y', '9');
+      rect.setAttribute('width', '13');
+      rect.setAttribute('height', '13');
+      rect.setAttribute('rx', '2');
+      rect.setAttribute('ry', '2');
+      svg.appendChild(rect);
+
+      const path = document.createElementNS(SVG_NS, 'path');
+      path.setAttribute('d', 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1');
+      svg.appendChild(path);
+      break;
+    }
+    case ICONS.check: {
+      const polyline = document.createElementNS(SVG_NS, 'polyline');
+      polyline.setAttribute('points', '20 6 9 17 4 12');
+      svg.appendChild(polyline);
+      break;
+    }
+    case ICONS.error: {
+      const circle = document.createElementNS(SVG_NS, 'circle');
+      circle.setAttribute('cx', '12');
+      circle.setAttribute('cy', '12');
+      circle.setAttribute('r', '10');
+      svg.appendChild(circle);
+
+      const line1 = document.createElementNS(SVG_NS, 'line');
+      line1.setAttribute('x1', '12');
+      line1.setAttribute('y1', '8');
+      line1.setAttribute('x2', '12');
+      line1.setAttribute('y2', '12');
+      svg.appendChild(line1);
+
+      const line2 = document.createElementNS(SVG_NS, 'line');
+      line2.setAttribute('x1', '12');
+      line2.setAttribute('y1', '16');
+      line2.setAttribute('x2', '12.01');
+      line2.setAttribute('y2', '16');
+      svg.appendChild(line2);
+      break;
+    }
+    default:
+      break;
+  }
+
+  return svg;
 }
 
 // Créer un bouton de copie avec feedback visuel
 function createCopyButton(copyFunction, label) {
   const copyButton = document.createElement('button');
   copyButton.className = 'copy-button';
-  copyButton.innerHTML = `${createSvgIcon(ICONS.copy)}<span>${label}</span>`;
+  
+  const iconElement = createSvgIcon(ICONS.copy);
+  const textSpan = document.createElement('span');
+  textSpan.textContent = label;
+
+  copyButton.appendChild(iconElement);
+  copyButton.appendChild(textSpan);
   copyButton.setAttribute('aria-label', label);
   
   const updateButton = (icon, text, className = '') => {
     if (className) copyButton.classList.add(className);
     else copyButton.classList.remove('copied');
-    copyButton.innerHTML = `${createSvgIcon(icon)}<span>${text}</span>`;
+
+    while (copyButton.firstChild) {
+      copyButton.removeChild(copyButton.firstChild);
+    }
+
+    const newIconElement = createSvgIcon(icon);
+    const newTextSpan = document.createElement('span');
+    newTextSpan.textContent = text;
+
+    copyButton.appendChild(newIconElement);
+    copyButton.appendChild(newTextSpan);
   };
   
   copyButton.addEventListener('click', async () => {
