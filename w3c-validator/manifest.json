@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "W3C Validator Checker",
+  "version": "1.2",
+  "description": "Vérifie la validité W3C de la page courante",
+  "icons": {
+    "128": "Odeline.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "w3c-validator@example.com",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
+  "permissions": [
+    "tabs",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://html5.validator.nu/*",
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_title": "Vérifier la validité W3C",
+    "default_popup": "popup.html",
+    "default_icon": "Odeline.png"
+  }
+}
